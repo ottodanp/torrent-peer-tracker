@@ -1,8 +1,5 @@
 from sqlite3 import connect
-from typing import Optional
-from uuid import uuid4
-
-from structures import PeerDetails
+from typing import Optional, Dict, Any
 
 
 class Database:
@@ -11,15 +8,52 @@ class Database:
         self._connection = connect(db_name)
         self._cursor = self._connection.cursor()
 
-    def handle_peer(self, peer: PeerDetails):
-        peer_id = self._peer_exists(peer.ip, peer.port)
-        if peer_id is None:
-            peer_id = self._insert_peer(peer.ip, peer.port)
+    def handle_peer_update(self, info_hash: str, peer: Dict[str, Any]):
+        ip = peer["ip"]
 
-        if not self._torrent_exists(peer.torrent_details.torrent_hash):
-            self._insert_torrent(peer.torrent_details.torrent_hash, peer.torrent_details.torrent_name)
+        peer_id = self.get_peer_id(ip, info_hash)
+        if not peer_id:
+            torrent_id = self.get_torrent_id(info_hash)
+            if not torrent_id:
+                return
 
-        self._manage_peer_transfers(peer_id, peer.torrent_details.torrent_hash, peer.uploaded, peer.downloaded)
+            self.execute(
+                f"INSERT INTO peers (torrent_id, ip, port, connection_type, uploaded, downloaded) VALUES ('{torrent_id}', '{ip}', {peer['port']}, '', {peer['uploaded']}, {peer['downloaded']})")
+        else:
+            self.execute(
+                f"UPDATE peers SET uploaded = {peer['uploaded']}, downloaded = {peer['downloaded']} WHERE id = '{peer_id}'")
+
+        self.commit()
+
+    def handle_torrent_update(self, torrent: Dict[str, Any]):
+        info_hash = torrent["infohash_v1"]
+        torrent_id = self.get_torrent_id(info_hash)
+        if torrent_id:
+            self.execute(
+                f"UPDATE torrents SET num_seeds = {torrent['num_seeds']}, num_leechs = {torrent['num_leechs']} WHERE id = '{torrent_id}'")
+
+        else:
+            self.execute(
+                f"INSERT INTO torrents (infohash_v1, name, num_seeds, num_leechs) VALUES ('{info_hash}', '{torrent['name']}', {torrent['num_seeds']}, {torrent['num_leechs']})")
+        self.commit()
+
+    def get_peer_id(self, ip: str, infohash: str) -> Optional[str]:
+        torrent_id = self.get_torrent_id(infohash)
+        if not torrent_id:
+            return
+
+        self.execute(f"SELECT * FROM peers WHERE ip = '{ip}' AND torrent_id = '{torrent_id}'")
+        data = self.fetchall()
+
+        if data:
+            return data[0][0]
+
+    def get_torrent_id(self, infohash: str) -> Optional[str]:
+        self.execute(f"SELECT id FROM torrents WHERE infohash_v1 = '{infohash}'")
+        data = self.fetchall()
+
+        if data:
+            return data[0][0]
 
     def create_tables(self):
         with open("up.sql", "r") as f:
@@ -27,51 +61,6 @@ class Database:
             for table in query.split(";"):
                 self.execute(table)
             self.commit()
-
-    def _insert_torrent(self, torrent_hash: str, name: str):
-        query = f"INSERT INTO torrents (hash, name) VALUES ('{torrent_hash}', '{name}')"
-        self.execute(query)
-        self.commit()
-
-    def _insert_peer(self, ip: str, port: int) -> str:
-        peer_id = str(uuid4())
-        query = f"INSERT INTO peers (peer_id, ip, port) VALUES ('{peer_id}', '{ip}', {port})"
-        self.execute(query)
-        self.commit()
-        return peer_id
-
-    def _manage_peer_transfers(self, peer_id: str, torrent_hash: str, uploaded: int, downloaded: int):
-        if self._peer_transfer_exists(peer_id, torrent_hash):
-            self._update_peer_transfer(peer_id, torrent_hash, uploaded, downloaded)
-        else:
-            self._insert_peer_transfer(peer_id, torrent_hash, uploaded, downloaded)
-
-    def _update_peer_transfer(self, peer_id: str, torrent_hash: str, uploaded: int, downloaded: int):
-        query = f"UPDATE transfers SET peer_uploaded = {uploaded}, peer_downloaded = {downloaded} WHERE peer_id = '{peer_id}' AND torrent_hash = '{torrent_hash}'"
-        self.execute(query)
-        self.commit()
-
-    def _insert_peer_transfer(self, peer_id: str, torrent_hash: str, uploaded: int, downloaded: int):
-        query = f"INSERT INTO transfers (peer_id, torrent_hash, peer_uploaded, peer_downloaded) VALUES ('{peer_id}', '{torrent_hash}', {uploaded}, {downloaded})"
-        self.execute(query)
-        self.commit()
-
-    def _peer_transfer_exists(self, peer_id: str, torrent_hash: str) -> bool:
-        query = f"SELECT * FROM transfers WHERE peer_id = '{peer_id}' AND torrent_hash = '{torrent_hash}'"
-        self.execute(query)
-        return bool(self.fetchall())
-
-    def _peer_exists(self, ip: str, port: int) -> Optional[str]:
-        query = f"SELECT peer_id FROM peers WHERE ip = '{ip}' AND port = {port}"
-        self.execute(query)
-        result = self.fetchall()
-        if result:
-            return result[0][0]
-
-    def _torrent_exists(self, torrent_hash: str) -> bool:
-        query = f"SELECT * FROM torrents WHERE hash = '{torrent_hash}'"
-        self.execute(query)
-        return bool(self.fetchall())
 
     def execute(self, query: str):
         return self._cursor.execute(query)
