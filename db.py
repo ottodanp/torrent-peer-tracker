@@ -8,22 +8,25 @@ class Database:
         self._connection = connect(db_name)
         self._cursor = self._connection.cursor()
 
-    def handle_peer_update(self, info_hash: str, peer: Dict[str, Any]):
+    def handle_peer_update(self, info_hash: str, peer: Dict[str, Any]) -> bool:
         ip = peer["ip"]
 
         peer_id = self.get_peer_id(ip, info_hash)
         if not peer_id:
             torrent_id = self.get_torrent_id(info_hash)
             if not torrent_id:
-                return
+                return False
 
             self.execute(
                 f"INSERT INTO peers (torrent_id, ip, port, connection_type, uploaded, downloaded) VALUES ('{torrent_id}', '{ip}', {peer['port']}, '', {peer['uploaded']}, {peer['downloaded']})")
+            self.commit()
+            return True
         else:
             self.execute(
                 f"UPDATE peers SET uploaded = {peer['uploaded']}, downloaded = {peer['downloaded']} WHERE id = '{peer_id}'")
 
         self.commit()
+        return False
 
     def handle_torrent_update(self, torrent: Dict[str, Any]):
         info_hash = torrent["infohash_v1"]

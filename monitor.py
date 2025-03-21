@@ -4,6 +4,7 @@ from typing import List, Dict, Any
 from aiohttp import ClientSession
 
 from db import Database
+from structures import Stats
 
 
 async def get_torrents(session: ClientSession):
@@ -45,16 +46,31 @@ async def torrents_worker(session: ClientSession, database: Database, active_tor
         await asyncio.sleep(5)
 
 
-async def data_worker(peer_queue: asyncio.Queue, database: Database):
+async def data_worker(peer_queue: asyncio.Queue, database: Database, stats: Stats):
+    hashes = set()
+
     while True:
         (infohash, peer) = await peer_queue.get()
-        database.handle_peer_update(infohash, peer)
-        print(peer)
+        if infohash not in hashes:
+            hashes.add(infohash)
+            stats.increment_torrents()
+
+        if database.handle_peer_update(infohash, peer):
+            stats.increment_peers()
+
+
+async def display_worker(stats: Stats):
+    while True:
+        print(f"Total Peers: {stats.total_peers_found()}")
+        print(f"Total Torrents: {stats.total_torrents_found()}")
+        await asyncio.sleep(5)
 
 
 async def main():
     database = Database("tracker.db")
     database.create_tables()
+
+    stats = Stats()
 
     async with ClientSession() as session:
         active_torrent_hashes = []
@@ -63,7 +79,8 @@ async def main():
         await asyncio.gather(
             torrents_worker(session, database, active_torrent_hashes),
             peers_worker(session, active_torrent_hashes, peer_queue),
-            data_worker(peer_queue, database),
+            data_worker(peer_queue, database, stats),
+            display_worker(stats)
         )
 
 
