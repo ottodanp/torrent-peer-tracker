@@ -33,14 +33,33 @@ async def peers_worker(session: ClientSession, active_torrent_hashes: List[Dict[
         await asyncio.sleep(2)
 
 
-async def torrents_worker(session: ClientSession, database: Database, active_torrents: List[Dict[str, Any]]):
+async def get_trackers(session: ClientSession, torrent_hash: str) -> List[str]:
+    async with session.get(f"http://127.0.0.1:8080/api/v2/torrents/trackers?hash={torrent_hash}") as response:
+        body = await response.json()
+
+        trackers = []
+        for tracker in body:
+            url = tracker["url"]
+            if url not in trackers and "://" in url:
+                trackers.append(url)
+
+    return trackers
+
+
+async def torrents_worker(session: ClientSession, database: Database, active_torrents: List[Dict[str, Any]],
+                          stats: Stats):
     hashes = set()
     while True:
         torrents = await get_torrents(session)
         for t_hash, details in torrents.items():
             if t_hash not in hashes:
                 hashes.add(t_hash)
-                database.handle_torrent_update(details)
+                torrent_id = database.handle_torrent_update(details)
+                if torrent_id:
+                    trackers = await get_trackers(session, t_hash)
+                    database.insert_trackers(torrent_id, trackers)
+                    stats.increment_trackers(len(trackers))
+
             active_torrents.append(details)
 
         await asyncio.sleep(5)
@@ -63,11 +82,12 @@ async def display_worker(stats: Stats):
     while True:
         print(f"Total Peers: {stats.total_peers_found()}")
         print(f"Total Torrents: {stats.total_torrents_found()}")
+        print(f"Total Trackers: {stats.total_trackers_found()}")
         await asyncio.sleep(5)
 
 
 async def main():
-    database = Database("tracker.db")
+    database = Database("torrents.db", "asn.db")
     database.create_tables()
 
     stats = Stats()
@@ -77,7 +97,7 @@ async def main():
         peer_queue = asyncio.Queue()
 
         await asyncio.gather(
-            torrents_worker(session, database, active_torrent_hashes),
+            torrents_worker(session, database, active_torrent_hashes, stats),
             peers_worker(session, active_torrent_hashes, peer_queue),
             data_worker(peer_queue, database, stats),
             display_worker(stats)

@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS torrents (
     infohash_v1 TEXT UNIQUE NOT NULL,
     name TEXT,
     num_seeds INTEGER,
-    num_leechs INTEGER
+    num_leeches INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS peers (
@@ -14,5 +14,15 @@ CREATE TABLE IF NOT EXISTS peers (
     connection_type TEXT,
     uploaded INTEGER,
     downloaded INTEGER,
+    asn_number INTEGER,
+    asn_name TEXT,
+    country TEXT,
+    FOREIGN KEY (torrent_id) REFERENCES torrents (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS trackers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    torrent_id INTEGER,
+    url TEXT NOT NULL,
     FOREIGN KEY (torrent_id) REFERENCES torrents (id) ON DELETE CASCADE
 );
