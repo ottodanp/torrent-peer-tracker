@@ -42,6 +42,5 @@ class TrackerAPI:
 
 
 if __name__ == '__main__':
-    db = Database("torrents.db", "asn.db")
-    api = TrackerAPI(db)
+    api = TrackerAPI(Database("torrents.db", "asn.db"))
     api.run()
