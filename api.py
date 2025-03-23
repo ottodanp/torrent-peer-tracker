@@ -18,6 +18,7 @@ class TrackerAPI:
         self._quart.route("/asn-to-ips/<asn>")(self.asn_to_ips)
         self._quart.route("/peer-count")(self.peer_count)
 
+    # min upload/download, asn number, asn name, country
     async def all_peers(self) -> List[Dict[str, Any]]:
         return self._db.get_all_peers()
 
@@ -40,11 +41,7 @@ class TrackerAPI:
         self._quart.run(host="0.0.0.0")
 
 
-def main():
+if __name__ == '__main__':
     db = Database("torrents.db", "asn.db")
     api = TrackerAPI(db)
     api.run()
-
-
-if __name__ == '__main__':
-    main()
