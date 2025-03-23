@@ -32,10 +32,7 @@ class TrackerAPI:
         return self._db.find_ips(asn)
 
     async def peer_count(self) -> Dict[str, Any]:
-        return {
-            "peers": self._db.get_peer_count(),
-            "unique_hosts": self._db.get_host_count()
-        }
+        return self._db.stats()
 
     def run(self):
         self._quart.run(host="0.0.0.0")

@@ -145,6 +145,33 @@ class Database:
         data = self.fetchall()
         return [self._format_peer_data(row) for row in data]
 
+    def stats(self) -> Dict[str, Any]:
+        peer_count = self.get_peer_count()
+        host_count = self.get_host_count()
+        self.execute("SELECT COUNT(*) FROM torrents")
+        torrent_count = self.fetchall()[0][0]
+        self.execute("SELECT SUM(uploaded) FROM peers")
+        total_uploaded = self.fetchall()[0][0]
+        self.execute("SELECT SUM(downloaded) FROM peers")
+        total_downloaded = self.fetchall()[0][0]
+        self.execute("SELECT COUNT(*) FROM peers WHERE asn_number != -1")
+        peers_with_asn = self.fetchall()[0][0]
+        self.execute("SELECT COUNT(*) FROM peers WHERE uploaded > 0")
+        peers_uploaded_to = self.fetchall()[0][0]
+        self.execute("SELECT COUNT(*) FROM peers WHERE downloaded > 0")
+        peers_downloaded_from = self.fetchall()[0][0]
+
+        return {
+            "peer_count": peer_count,
+            "host_count": host_count,
+            "torrent_count": torrent_count,
+            "total_uploaded": total_uploaded,
+            "total_downloaded": total_downloaded,
+            "peers_with_asn": peers_with_asn,
+            "peers_uploaded_to": peers_uploaded_to,
+            "peers_downloaded_from": peers_downloaded_from,
+        }
+
     @staticmethod
     def _format_asn_data(asn_number: int = -1, start_ip: str = "", end_ip: str = "", country_code: str = "",
                          registered_to: str = "", success: bool = False) -> Dict[str, Any]:
