@@ -146,7 +146,7 @@ class Database:
         return [self._format_peer_data(row) for row in data]
 
     @staticmethod
-    def _format_asn_data(asn_number: int = 0, start_ip: str = "", end_ip: str = "", country_code: str = "",
+    def _format_asn_data(asn_number: int = -1, start_ip: str = "", end_ip: str = "", country_code: str = "",
                          registered_to: str = "", success: bool = False) -> Dict[str, Any]:
         return {
             "asn_number": asn_number,
@@ -157,9 +157,8 @@ class Database:
             "success": success
         }
 
-    @staticmethod
-    def _format_peer_data(row: Tuple) -> Dict[str, Any]:
-        return {
+    def _format_peer_data(self, row: Tuple) -> Dict[str, Any]:
+        return self._clean_payload({
             "id": row[0],
             "torrent_id": row[1],
             "ip": row[2],
@@ -170,7 +169,11 @@ class Database:
             "asn_number": row[7],
             "asn_name": row[8],
             "country": row[9]
-        }
+        })
+
+    @staticmethod
+    def _clean_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+        return {k: v for k, v in data.items() if (v is not "" and v != -1)}
 
     def create_tables(self, target_file: str = "scripts/torrent_up.sql"):
         with open(target_file, "r") as f:
