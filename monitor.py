@@ -129,7 +129,7 @@ async def main():
             torrents_worker(session, database, active_torrent_hashes, stats),
             peers_worker(session, active_torrent_hashes, peer_queue),
             data_worker(peer_queue, database, stats),
-            # display_worker(stats)
+            display_worker(stats)
         )
 
 

@@ -3,6 +3,8 @@ import struct
 from sqlite3 import connect, IntegrityError
 from typing import Optional, Dict, Any, List, Tuple
 
+LOOKUP_TYPES = ["uploaded", "downloaded", "asn_number", "asn_name", "country", "has_asn"]
+
 
 def ip_to_uint32(ip_address: str) -> int:
     try:
@@ -13,6 +15,20 @@ def ip_to_uint32(ip_address: str) -> int:
 
 def uint32_to_ip(ip_int: int) -> str:
     return socket.inet_ntoa(struct.pack("!I", ip_int))
+
+
+def append_command_clause(command: str, clause: str) -> str:
+    if "WHERE" in command:
+        return f"{command} AND {clause}"
+    return f"{command} WHERE {clause}"
+
+
+def append_comparative_clause(command: str, clause: str, filters: Dict[str, Any], filter_type: str) -> str:
+    val = filters[filter_type]
+    if not val or not val.isdigit():
+        return command
+
+    return append_command_clause(command, f"{clause}{val}")
 
 
 class Database:
@@ -87,8 +103,20 @@ class Database:
         if data:
             return data[0][0]
 
-    def get_all_peers(self) -> List[Dict[str, Any]]:
-        self.execute("SELECT * FROM peers")
+    def get_peers(self, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
+        query = "SELECT * FROM peers"
+        for filter_type in filters:
+            if filter_type in LOOKUP_TYPES:
+                if filter_type in ["uploaded", "downloaded"]:
+                    query = append_comparative_clause(query, f"{filter_type} >= ", filters, filter_type)
+                elif filter_type == "asn_number":
+                    query = append_command_clause(query, f"asn_number = {filters[filter_type]}")
+                elif filter_type in ["asn_name", "country"]:
+                    query = append_command_clause(query, f"{filter_type} LIKE '%{filters[filter_type]}%'")
+                elif filter_type == "has_asn":
+                    query = append_command_clause(query, "asn_number != -1")
+
+        self.execute(query)
         data = self.fetchall()
         return [self._format_peer_data(row) for row in data]
 
